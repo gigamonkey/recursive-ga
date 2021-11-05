@@ -1,46 +1,81 @@
-const ALPHABET = "abcdefghijklmnopqrstuvwxyz ";
-const MUTATION_RATE = 0.0001;
+const ALPHABET = "abcdefghijklmnopqrstuvwxyz ,.?!;:";
 const MAX_GENERATIONS = 1000;
 
-function solve(phrase, populationSize=1000, alphabet=ALPHABET) {
-  let initialPopulation = newPopulation(populationSize, phrase.length, alphabet);
-  return genetic_search(initialPopulation, phrase, alphabet, 0)
+function solve(phrase, populationSize = 1000, mutationRate = 0.0001, alphabet = ALPHABET) {
+  let generator = makeRandomPhraseGenerator(phrase.length, alphabet);
+  let fitness = makeFitnessFunction(phrase);
+  let crosser = cross;
+  let mutator = makeMutator(alphabet, mutationRate);
+  let done = makeStopTest(phrase);
+
+  let population = newPopulation(populationSize, generator);
+  return genetic_search(population, fitness, crosser, mutator, done, 0);
 }
 
-function genetic_search(population, phrase, alphabet, generation) {
-  if (generation == MAX_GENERATIONS || done(population, phrase)) {
-    return { best: best(population, phrase), generation: generation }
+function genetic_search(population, fitness, crosser, mutator, done, generation) {
+  if (generation == MAX_GENERATIONS || done(population)) {
+    return { best: best(population, fitness), generation: generation }
   } else {
-    let next = nextGeneration(population, phrase, alphabet);
-    return genetic_search(next, phrase, alphabet, generation + 1);
+    let parents = getParents(population, fitness);
+    let next = nextGeneration(population.length, parents, crosser, mutator);
+    return genetic_search(next, fitness, crosser, mutator, done, generation + 1);
   }
 }
 
-function newPopulation(size, phraseLength, alphabet) {
+function makeRandomPhraseGenerator(length, alphabet) {
+  return () => {
+    let phrase = "";
+    for (let i = 0; i < length; i++) {
+      phrase += random(alphabet);
+    }
+    return phrase;
+  };
+}
+
+function newPopulation(size, generator) {
   let population = [];
   for (let i = 0; i < size; i++) {
-    population.push(randomPhrase(phraseLength, alphabet));
+    population.push(generator());
   }
   return population;
 }
 
-function randomPhrase(length, alphabet) {
-  let phrase = "";
-  for (let i = 0; i < length; i++) {
-    phrase += random(alphabet);
-  }
-  return phrase;
+function makeFitnessFunction(phrase) {
+  return (element) => {
+    let f = 0;
+    for (let i = 0; i < element.length; i++) {
+      if (element[i] === phrase[i]) {
+        f++;
+      }
+    }
+    return f;
+  };
 }
 
-function done(population, phrase) {
-  return population.indexOf(phrase) != -1;
+function makeMutator(alphabet, mutationRate) {
+  return (phrase) => {
+    let mutated = "";
+    for (let i = 0; i < phrase.length; i++) {
+      mutated += Math.random() < mutationRate ? random(alphabet) : phrase[i];
+    }
+    return mutated;
+  };
 }
 
-function best(population, phrase) {
+function makeStopTest(phrase) {
+  return (population) => population.indexOf(phrase) != -1;
+}
+
+function cross(p1, p2) {
+  let i = Math.floor(Math.random() * p1.length);
+  return p1.substring(0, i) + p2.substring(i);
+}
+
+function best(population, fitness) {
   let maxFitness = -1;
   let best = null;
   for (let i = 0; i < population.length; i++) {
-    let f = fitness(population[i], phrase);
+    let f = fitness(population[i]);
     if (f > maxFitness) {
       maxFitness = f;
       best = population[i];
@@ -49,29 +84,10 @@ function best(population, phrase) {
   return best;
 }
 
-function fitness(element, phrase) {
-  let f = 0;
-  for (let i = 0; i < element.length; i++) {
-    if (element[i] === phrase[i]) {
-      f++;
-    }
-  }
-  return f;
-}
-
-function nextGeneration(population, phrase, alphabet) {
-  let parents = getParents(population, phrase);
-  let gen = [];
-  for (var i = 0; i < population.length; i++) {
-    gen.push(mutate(cross(random(parents), random(parents)), alphabet));
-  }
-  return gen;
-}
-
-function getParents(population, phrase) {
+function getParents(population, fitness) {
   let parents = [];
   for (var i = 0; i < population.length; i++) {
-    for (let j = 0; j < fitness(population[i], phrase); j++) {
+    for (let j = 0; j < fitness(population[i]); j++) {
       parents.push(population[i]);
     }
   }
@@ -81,27 +97,12 @@ function getParents(population, phrase) {
   return parents.length > 0 ? parents : population;
 }
 
-function fitness(str, phrase) {
-  var f = 0
-  for (var i = 0; i < phrase.length; i++) {
-    if (str[i] == phrase[i]) {
-      f++;
-    }
+function nextGeneration(size, parents, crosser, mutator) {
+  let gen = [];
+  for (var i = 0; i < size; i++) {
+    gen.push(mutator(crosser(random(parents), random(parents))));
   }
-  return f;
-}
-
-function cross(p1, p2) {
-  let i = Math.floor(Math.random() * p1.length);
-  return p1.substring(0, i) + p2.substring(i);
-}
-
-function mutate(str, alphabet) {
-  let mutated = "";
-  for (let i = 0; i < str.length; i++) {
-    mutated += Math.random() < MUTATION_RATE ? random(alphabet) : str[i];
-  }
-  return mutated;
+  return gen;
 }
 
 function random(xs) {
