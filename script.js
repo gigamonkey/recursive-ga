@@ -2,8 +2,8 @@
  * Top-level solver. This just sets up the various functions we need to pass
  * into genetic_search and then calls it to do all the real work. In theory
  * the basic structure of genetic_search should work for any problem as long
- * as we can define the five functions generator, fitness, crosser, mutator,
- * and done in some appropriate way.
+ * as we can define the six functions newCritter, fitness, parentSelector, 
+ * crosser, mutator, and done in some appropriate way.
  */
 function solve(
   phrase,
@@ -11,16 +11,16 @@ function solve(
   mutationRate = 0.0001,
   maxGenerations = 1000,
   alphabet = "abcdefghijklmnopqrstuvwxyz ,.?!;:"
-  )
-{
-  let generator = randomPhraseGenerator(phrase.length, alphabet);
+) {
+  let newCritter = randomPhraseGenerator(phrase.length, alphabet);
   let fitness = phraseSimilarity(phrase);
+  let parentSelector = weightByFitness(fitness);
   let crosser = randomCrossover;
   let mutator = pointMutator(alphabet, mutationRate);
   let done = fitnessThreshold(fitness, phrase.length);
 
-  let population = newPopulation(populationSize, generator);
-  return genetic_search(population, fitness, crosser, mutator, done, maxGenerations, 0);
+  let population = newPopulation(populationSize, newCritter);
+  return genetic_search(population, fitness, parentSelector, crosser, mutator, done, maxGenerations, 0);
 }
 
 /*
@@ -32,14 +32,14 @@ function solve(
  * Because Javascript doesn't do tail-call optimimization, this implementation could
  * eventually run into limits on recursion depth but modern browsers have pretty high
  * limits (over 9,000 at least if Stack Overflow is to be trusted.)
- */ 
-function genetic_search(population, fitness, crosser, mutator, done, maxGenerations, generation) {
+ */
+function genetic_search(population, fitness, parentSelector, crosser, mutator, done, maxGenerations, generation) {
   if (generation == maxGenerations || done(population)) {
     return { best: best(population, fitness), generation: generation }
   } else {
-    let parents = getParents(population, fitness);
+    let parents = parentSelector(population);
     let next = nextGeneration(population.length, parents, crosser, mutator);
-    return genetic_search(next, fitness, crosser, mutator, done, maxGenerations, generation + 1);
+    return genetic_search(next, fitness, parentSelector, crosser, mutator, done, maxGenerations, generation + 1);
   }
 }
 
@@ -47,8 +47,8 @@ function randomPhraseGenerator(length, alphabet) {
   return () => Array(length).fill().map(() => random(alphabet)).join("");
 }
 
-function newPopulation(size, generator) {
-  return Array(size).fill().map(generator);
+function newPopulation(size, newCritter) {
+  return Array(size).fill().map(newCritter);
 }
 
 function phraseSimilarity(phrase) {
@@ -74,13 +74,15 @@ function best(population, fitness) {
   return population.map(wrap).reduce((best, p) => (p.fitness > best.fitness ? p : best)).p;
 }
 
-function getParents(population, fitness) {
-  let parents = population.flatMap((p) => Array(fitness(p)).fill(p));
-  // It's possible, though unlikely, that every member of the population
-  // has fitness zero and thus there are no parents. Everybody in the current
-  // generation gets a chance to procreate in that case and we have to hope
-  // for some benefitial mutations.
-  return parents.length > 0 ? parents : population;
+function weightByFitness(fitness, scale = 1) {
+  return (population) => {
+    let parents = population.flatMap((p) => Array(fitness(p) * scale).fill(p));
+    // It's possible, though unlikely, that every member of the population
+    // has fitness zero and thus there are no parents. Everybody in the current
+    // generation gets a chance to procreate in that case and we have to hope
+    // for some benefitial mutations.
+    return parents.length > 0 ? parents : population;
+  };
 }
 
 function nextGeneration(size, parents, crosser, mutator) {
